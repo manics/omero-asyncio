@@ -41,7 +41,7 @@ async def _exec_ice_async(loop, future, func, *args, **kwargs):
 async def ice_async(func, loop, *args, **kwargs):
     # https://docs.python.org/3.6/library/asyncio-task.html#example-future-with-run-until-complete
     future = asyncio.Future()
-    asyncio.ensure_future(_exec_ice_async(loop, future, func, *args, **kwargs))
+    await asyncio.ensure_future(_exec_ice_async(loop, future, func, *args, **kwargs))
     result = await future
     return result
 
@@ -54,9 +54,6 @@ class AsyncService:
         svc: The OMERO Ice service
         loop: The async event loop (optional)
         """
-
-        def copy_doc(a, b):
-            setattr(b, "__doc__", getattr(a, "__doc__"))
 
         # This would be easier in Python 3.7 since Future.get_loop() returns
         # the loop the Future is bound to so there's no need to pass it
@@ -92,6 +89,19 @@ class AsyncService:
                 sync_m,
                 update_wrapper(partial(getattr(svc, sync_m)), getattr(svc, sync_m)),
             )
+
+
+# https://www.roguelynn.com/words/asyncio-exception-handling/
+# https://stackoverflow.com/a/50265468
+def handle_exception(loop, context):
+    # This is a last resort, should always await exceptions
+    # context["exception"] may not exist, context["message"] should
+    msg = context.get("exception", context["message"])
+    logging.error(f"Unhandled exception: {msg}")
+
+    # first, handle with default handler
+    loop.default_exception_handler(context)
+    loop.stop()
 
 
 async def do_stuff(session, serial):
@@ -132,6 +142,7 @@ try:
     # https://docs.python.org/3.6/library/asyncio-dev.html
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
+    loop.set_exception_handler(handle_exception)
     start = time.perf_counter()
     loop.run_until_complete(do_stuff(session, serial))
     end = time.perf_counter() - start
