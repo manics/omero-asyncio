@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import asyncio
-from functools import partial
+from functools import partial, update_wrapper
 import logging
 import time
 
@@ -15,7 +15,7 @@ def _firstline_truncate(s):
     return s
 
 
-async def _exec_ice_async(future, func, *args, **kwargs):
+async def _exec_ice_async(loop, future, func, *args, **kwargs):
 
     # Ice runs in a different thread from asyncio so must use
     # call_soon_threadsafe
@@ -23,11 +23,11 @@ async def _exec_ice_async(future, func, *args, **kwargs):
 
     def exception_cb(ex):
         logging.warning("exception_cb: %s", _firstline_truncate(ex))
-        future.get_loop().call_soon_threadsafe(future.set_exception, ex)
+        loop.call_soon_threadsafe(future.set_exception, ex)
 
     def response_cb(result):
         logging.info("response_cb: %s", _firstline_truncate(result))
-        future.get_loop().call_soon_threadsafe(future.set_result, result)
+        loop.call_soon_threadsafe(future.set_result, result)
 
     a = func(*args, **kwargs, _response=response_cb, _ex=exception_cb)
     logging.debug(
@@ -38,33 +38,60 @@ async def _exec_ice_async(future, func, *args, **kwargs):
     )
 
 
-async def ice_async(func, *args, **kwargs):
+async def ice_async(func, loop, *args, **kwargs):
     # https://docs.python.org/3.6/library/asyncio-task.html#example-future-with-run-until-complete
     future = asyncio.Future()
-    asyncio.ensure_future(_exec_ice_async(future, func, *args, **kwargs))
+    asyncio.ensure_future(_exec_ice_async(loop, future, func, *args, **kwargs))
     result = await future
     return result
 
 
 class AsyncService:
-    def __init__(self, svc):
+    def __init__(self, svc, loop=None):
+        """
+        Convert an OMERO Ice service to an async service
+
+        svc: The OMERO Ice service
+        loop: The async event loop (optional)
+        """
+
         def copy_doc(a, b):
             setattr(b, "__doc__", getattr(a, "__doc__"))
 
+        # This would be easier in Python 3.7 since Future.get_loop() returns
+        # the loop the Future is bound to so there's no need to pass it
+        # https://docs.python.org/3/library/asyncio-future.html#asyncio.Future.get_loop
+        if not loop:
+            loop = asyncio.get_event_loop()
         methods = {
             m for m in dir(svc) if callable(getattr(svc, m)) and not m.startswith("_")
         }
+
+        # Ice methods come in sync (`f`) and async (`begin_f`…`end_f`) versions
+        # https://doc.zeroc.com/ice/3.6/language-mappings/python-mapping/client-side-slice-to-python-mapping/asynchronous-method-invocation-ami-in-python
+        # Replace each set of functions with a single async function `f`.
+        # Uses `update_wrapper` to copy the original signature for `f` to the
+        # wrapped function.
         async_methods = {m for m in methods if m.startswith("begin_")}
         for async_m in async_methods:
-            m = async_m[6:]
-            methods.remove(m)
-            methods.remove("begin_" + m)
-            methods.remove("end_" + m)
-            setattr(self, m, partial(ice_async, getattr(svc, async_m)))
-            copy_doc(getattr(svc, async_m), getattr(self, m))
+            sync_m = async_m[6:]
+            methods.remove(sync_m)
+            methods.remove("begin_" + sync_m)
+            methods.remove("end_" + sync_m)
+            setattr(
+                self,
+                sync_m,
+                update_wrapper(
+                    partial(ice_async, getattr(svc, async_m), loop),
+                    getattr(svc, sync_m),
+                ),
+            )
         for sync_m in methods:
-            setattr(self, sync_m, partial(getattr(svc, sync_m)))
-            copy_doc(getattr(svc, sync_m), getattr(self, sync_m))
+            setattr(
+                self,
+                sync_m,
+                update_wrapper(partial(getattr(svc, sync_m)), getattr(svc, sync_m)),
+            )
 
 
 async def do_stuff(session, serial):
