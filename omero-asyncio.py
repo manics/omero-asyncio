@@ -15,11 +15,22 @@ def _firstline_truncate(s):
     return s
 
 
-async def _exec_ice_async(loop, future, func, *args, **kwargs):
+async def ice_async(loop, func, *args, **kwargs):
+    """
+    Wrap an asynchronous Ice service method so it can be used with asyncio
+
+    loop: The event loop
+    func: The Ice service method
+    *args: Positional arguments for the Ice service method
+    *kwargs: Keyword arguments for the Ice service method
+    """
+    # https://docs.python.org/3.6/library/asyncio-task.html#example-future-with-run-until-complete
 
     # Ice runs in a different thread from asyncio so must use
     # call_soon_threadsafe
     # https://docs.python.org/3.6/library/asyncio-dev.html#concurrency-and-multithreading
+
+    future = loop.create_future()
 
     def exception_cb(ex):
         logging.warning("exception_cb: %s", _firstline_truncate(ex))
@@ -37,11 +48,6 @@ async def _exec_ice_async(loop, future, func, *args, **kwargs):
         a.isCompleted(),
     )
 
-
-async def ice_async(func, loop, *args, **kwargs):
-    # https://docs.python.org/3.6/library/asyncio-task.html#example-future-with-run-until-complete
-    future = asyncio.Future()
-    await asyncio.ensure_future(_exec_ice_async(loop, future, func, *args, **kwargs))
     result = await future
     return result
 
@@ -79,7 +85,7 @@ class AsyncService:
                 self,
                 sync_m,
                 update_wrapper(
-                    partial(ice_async, getattr(svc, async_m), loop),
+                    partial(ice_async, loop, getattr(svc, async_m)),
                     getattr(svc, sync_m),
                 ),
             )
