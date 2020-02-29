@@ -9,7 +9,7 @@ from omero.rtypes import unwrap
 
 async def _exec_ice_async(future, func, *args, **kwargs):
     def exception_cb(ex):
-        print("exception_cb")
+        print("exception_cb", str(ex)[:40])
         future.get_loop().call_soon_threadsafe(future.set_exception, ex)
 
     def response_cb(result):
@@ -19,7 +19,7 @@ async def _exec_ice_async(future, func, *args, **kwargs):
         future.get_loop().call_soon_threadsafe(future.set_result, result)
 
     a = func(*args, **kwargs, _response=response_cb, _ex=exception_cb)
-    print("ice_async", a, a.isCompleted())
+    print("_exec_ice_async", a, a.isCompleted())
     # await asyncio.sleep(1)
     # exception_cb(Exception('ice_async'))
     # response_cb('ice_async')
@@ -72,6 +72,8 @@ session = client.createSession("public", "public")
 try:
     start = time.perf_counter()
     # asyncio.run(do_stuff(session))
+
+    # https://docs.python.org/3.6/library/asyncio-dev.html
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
     loop.run_until_complete(do_stuff(session, serial))
