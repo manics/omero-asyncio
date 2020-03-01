@@ -1,4 +1,6 @@
 # OMERO Python asyncio
+[![Build Status](https://travis-ci.com/manics/omero-asyncio.svg?branch=master)](
+https://travis-ci.com/manics/omero-asyncio)
 
 OMERO.py client and services that works with [`asyncio`](https://docs.python.org/3.6/library/asyncio.html).
 

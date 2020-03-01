@@ -1,0 +1,32 @@
+language: python
+
+jobs:
+  include:
+    - name: lint
+      script:
+        - pip install pre-commit
+        - pre-commit run --all-files
+    - name: python36
+      python: "3.6"
+      dist: bionic
+      script:
+        - python -mpip install https://github.com/ome/zeroc-ice-ubuntu1804/releases/download/0.3.0/zeroc_ice-3.6.5-cp36-cp36m-linux_x86_64.whl
+        - python setup.py sdist
+        - python -mpip install dist/*.tar.gz
+        # - pytest tests
+        - python example.py
+    - stage: deploy
+      python: "3.6"
+      script: skip
+      skip_cleanup: true
+      deploy:
+        provider: pypi
+        user: $PYPI_USER
+        password: $PYPI_PASSWORD
+        distributions: sdist bdist_wheel
+        on:
+          tags: true
+
+cache:
+  directories:
+  - $HOME/.cache/pip
