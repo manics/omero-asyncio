@@ -47,3 +47,5 @@ With a bit of additional wrapping it is possible to integrate these Ice asynchro
 A wrapper class `AsyncService` is used to wrap Ice services to automatically convert all methods to their async form.
 
 Note in Ice 3.7 this would be a lot easier as [Ice provides a wrapper to return `asyncio.Future`s directly](https://doc.zeroc.com/ice/3.7/language-mappings/python-mapping/client-side-slice-to-python-mapping/asynchronous-method-invocation-ami-in-python/ami-in-python-with-futures#id-.AMIinPythonwithFuturesv3.7-asyncioIntegration).
+
+Also note that although this enables concurrent Ice calls it is still [restricted to a single thread](https://doc.zeroc.com/frequently-asked-questions/ice-for-python-faqs/how-does-multi-threading-work-with-ice-for-python).
