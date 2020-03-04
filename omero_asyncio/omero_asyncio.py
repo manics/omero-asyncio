@@ -35,7 +35,7 @@ async def ice_async(loop, func, *args, **kwargs):
         logging.warning("exception_cb: %s", _firstline_truncate(ex))
         loop.call_soon_threadsafe(future.set_exception, ex)
 
-    def response_cb(result=None):
+    def response_cb(result=None, *outparams):
         logging.info("response_cb: %s", _firstline_truncate(result))
         loop.call_soon_threadsafe(future.set_result, result)
 
