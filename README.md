@@ -4,7 +4,7 @@ https://travis-ci.com/manics/omero-asyncio)
 
 OMERO.py client and services that works with [`asyncio`](https://docs.python.org/3.6/library/asyncio.html).
 
-For example, compare the time taken to run multiple HQL queries in [`example.py`](./example.py)  serially (`serial=True`, around 3 seconds) and concurrently (`serial=False`, around 1 second).
+For example, compare the time taken to run multiple HQL queries in [`example.py`](example/example.py)  serially (`serial=True`, around 3 seconds) and concurrently (`serial=False`, around 1 second).
 
 
 # Async Classes

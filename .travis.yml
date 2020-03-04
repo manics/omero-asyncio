@@ -14,7 +14,7 @@ jobs:
         - python setup.py sdist
         - python -mpip install dist/*.tar.gz
         # - pytest tests
-        - python example.py
+        - python example/example.py
     - stage: deploy
       python: "3.6"
       script: skip

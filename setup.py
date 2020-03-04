@@ -8,7 +8,7 @@ setuptools.setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     use_scm_version={"write_to": "omero_asyncio/_version.py"},
-    packages=setuptools.find_packages(),
+    packages=["omero_asyncio"],
     setup_requires=["setuptools_scm"],
     install_requires=["omero-py>=5.6.0"],
     # tests_require=["pytest"],
