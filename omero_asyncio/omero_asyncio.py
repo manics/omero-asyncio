@@ -137,17 +137,20 @@ class AsyncClient(omero.clients.BaseClient):
         super().__init__(args, id, host, port, pmap)
 
         # Ugly, but there's no other way to override createSession without
-        # copying all the code for the class
+        # copying all the code for the class other than to access these
+        # private __variables from BaseClient:
         self.__agent = self._BaseClient__agent
-        self.__cb = self._BaseClient__cb
+        # self.__cb modified in-place
         self.__ic = self._BaseClient__ic
         self.__ip = self._BaseClient__ip
-        self.__lock = self._BaseClient__lock
-        self.__logger = self._BaseClient__logger
-        self.__oa = self._BaseClient__oa
-        self.__previous = self._BaseClient__previous
-        self.__sf = self._BaseClient__sf
+        # self.__lock modified in-place
+        # self.__logger modified in-place
+        # self.__oa modified in-place
+        # self.__previous modified in-place
+        # self.__sf modified in-place
         self.__uuid = self._BaseClient__uuid
+
+        self._asyncsession = None
 
     async def createSession(self, username=None, password=None):
         """
@@ -157,24 +160,24 @@ class AsyncClient(omero.clients.BaseClient):
         - the session is created asynchronously
         - keep alive is not initialised
         """
-        self.__lock.acquire()
+        self._BaseClient__lock.acquire()
         try:
 
             # Checking state
 
-            if self.__sf:
+            if self._BaseClient__sf:
                 raise omero.ClientError(
                     "Session already active. "
                     "Create a new omero.client or closeSession()"
                 )
 
             if not self.__ic:
-                if not self.__previous:
+                if not self._BaseClient__previous:
                     raise omero.ClientError(
                         "No previous data to recreate communicator."
                     )
-                self._initData(self.__previous)
-                self.__previous = None
+                self._initData(self._BaseClient__previous)
+                self._BaseClient__previous = None
 
             # Check the required properties
 
@@ -214,17 +217,19 @@ class AsyncClient(omero.clients.BaseClient):
                     )
 
                     # Create the adapter
-                    self.__oa = self.__ic.createObjectAdapterWithRouter(
+                    self._BaseClient__oa = self.__ic.createObjectAdapterWithRouter(
                         "omero.ClientCallback", rtr
                     )
-                    self.__oa.activate()
+                    self._BaseClient__oa.activate()
 
                     id = Ice.Identity()
                     id.name = self.__uuid
                     id.category = rtr.getCategoryForClient()
 
-                    self.__cb = AsyncClient.CallbackI(self.__ic, self.__oa, id)
-                    self.__oa.add(self.__cb, id)
+                    self._BaseClient__cb = AsyncClient.CallbackI(
+                        self.__ic, self._BaseClient__oa, id
+                    )
+                    self._BaseClient__oa.add(self._BaseClient__cb, id)
 
                     break
                 except omero.WrappedCreateSessionException as wrapped:
@@ -239,19 +244,21 @@ class AsyncClient(omero.clients.BaseClient):
             if not prx:
                 raise omero.ClientError("Obtained null object prox")
 
+            # self._BaseClient__sf is set to the normal (sync) session since this
+            # variable is used by other methods.
             # Check type
-            sf = omero.api.ServiceFactoryPrx.uncheckedCast(prx)
-            if not sf:
+            self._BaseClient__sf = omero.api.ServiceFactoryPrx.uncheckedCast(prx)
+            if not self._BaseClient__sf:
                 raise omero.ClientError("Obtained object proxy is not a ServiceFactory")
-            self.__sf = AsyncSession(sf)
+            self._asyncsession = AsyncSession(self._BaseClient__sf)
 
             # Don't automatically configure keep alive
 
             # Set the client callback on the session
             # and pass it to icestorm
             try:
-                raw = self.__oa.createProxy(self.__cb.id)
-                await self.__sf.setCallback(
+                raw = self._BaseClient__oa.createProxy(self._BaseClient__cb.id)
+                await self._asyncsession.setCallback(
                     omero.api.ClientCallbackPrx.uncheckedCast(raw)
                 )
                 # self.__sf.subscribe("/public/HeartBeat", raw)
@@ -259,15 +266,29 @@ class AsyncClient(omero.clients.BaseClient):
                 self.__del__()
                 raise
 
-            self._BaseClient__cb = self.__cb
-            self._BaseClient__oa = self.__oa
-            self._BaseClient__sf = self.__sf
-
             # Set the session uuid in the implicit context
             self.getImplicitContext().put(
                 omero.constants.SESSIONUUID, self.getSessionId()
             )
 
-            return self.__sf
+            return self._asyncsession
         finally:
-            self.__lock.release()
+            self._BaseClient__lock.release()
+
+    def getSession(self, blocking=True):
+        """
+        Returns the current active AsyncSession.
+
+        If `blocking=True` throws an exception if the AsyncSession is none.
+        """
+        if not blocking:
+            return self._asyncsession
+
+        self._BaseClient__lock.acquire(blocking)
+        try:
+            sf = self._asyncsession
+            if not sf:
+                raise omero.ClientError("No session available")
+            return sf
+        finally:
+            self._BaseClient__lock.release()
